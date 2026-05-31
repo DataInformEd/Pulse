@@ -3,59 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pulse Point - Local Test</title>
+    <title>Pulse Point - Secure Survey</title>
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; }
         input { display: block; width: 100%; margin-bottom: 15px; padding: 10px; }
         button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        
+        /* We hide the survey initially until they log in */
+        #surveyForm { display: none; margin-top: 20px; }
+        #loginWall { margin-top: 20px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; text-align: center; }
     </style>
+    
+    <!-- 1. Load the official Google Identity Services Library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
-    <h2>Pulse Point Test App</h2>
+    <h2>Pulse Point</h2>
     
-    <input type="email" id="email" placeholder="Student/Staff Email" required>
-    <input type="text" id="q1" placeholder="Answer to Question 1">
-    <input type="text" id="q2" placeholder="Answer to Question 2">
-    
-    <button id="submitBtn" onclick="sendData()">Submit Survey</button>
-    <p id="statusMessage"></p>
+    <!-- 2. The Google Login Wall -->
+    <div id="loginWall">
+        <p>Please sign in with your school Google account to access the survey.</p>
+        
+        <!-- Google's built-in configuration for the button -->
+        <div id="g_id_onload"
+             data-client_id="471749041111-pk9kfjbse7itlv5i71bm8p6hvet0n3qb.apps.googleusercontent.com"
+             data-callback="handleCredentialResponse"
+             data-auto_prompt="false">
+        </div>
+        
+        <!-- This empty div is where Google automatically draws the actual button -->
+        <div class="g_id_signin"
+             data-type="standard"
+             data-size="large"
+             data-theme="outline"
+             data-text="sign_in_with"
+             data-shape="rectangular"
+             data-logo_alignment="left">
+        </div>
+    </div>
+
+    <!-- 3. The Hidden Survey Form -->
+    <div id="surveyForm">
+        <!-- Notice we made the email field "readonly" so they can't change it after logging in -->
+        <input type="email" id="email" readonly style="background-color: #f0f0f0;">
+        <input type="text" id="q1" placeholder="Answer to Question 1">
+        <input type="text" id="q2" placeholder="Answer to Question 2">
+        <button id="submitBtn" onclick="sendData()">Submit Survey</button>
+        <p id="statusMessage"></p>
+    </div>
 
     <script>
-        // THIS IS THE BRIDGE: Replace the URL below with the Web App URL you just copied.
-        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxgwOiHSx_K0eOsyqQ8jadABsdkf4OOKrEF-wVFq9x47SdFSl9CYnFN3jI57aubXr_K/exec";
+        // Your Apps Script URL from earlier
+        const GAS_WEB_APP_URL = "PASTE_YOUR_COPIED_EXEC_URL_HERE";
 
+        // 4. Decode the secure token Google gives us back
+        function decodeJwtResponse(token) {
+            let base64Url = token.split('.')[1];
+            let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        }
+
+        // 5. What happens when they click the button and successfully log in
+        function handleCredentialResponse(response) {
+            // Decode the token to get the user's details
+            const responsePayload = decodeJwtResponse(response.credential);
+            
+            // Grab the verified email
+            const verifiedEmail = responsePayload.email;
+            
+            // Hide the login wall and show the survey
+            document.getElementById("loginWall").style.display = "none";
+            document.getElementById("surveyForm").style.display = "block";
+            
+            // Automatically fill in the hidden email field so it gets sent with the answers
+            document.getElementById("email").value = verifiedEmail;
+        }
+
+        // 6. The same send function from our earlier test
         async function sendData() {
             document.getElementById("statusMessage").innerText = "Sending data...";
             document.getElementById("submitBtn").disabled = true;
 
-            // 1. Gather the data from the inputs
             const payload = {
-                email: document.getElementById("email").value,
+                email: document.getElementById("email").value, // Captures the verified email
                 question1: document.getElementById("q1").value,
                 question2: document.getElementById("q2").value
             };
 
             try {
-                // 2. Send the package to your open Google API
                 const response = await fetch(GAS_WEB_APP_URL, {
                     method: "POST",
                     body: JSON.stringify(payload)
                 });
-
-                // 3. Read the receipt
                 const result = await response.json();
-                
                 if (result.status === "success") {
-                    document.getElementById("statusMessage").innerText = "Success! Data sent to Google Sheets.";
+                    document.getElementById("statusMessage").innerText = "Success! Data sent.";
                 } else {
                     document.getElementById("statusMessage").innerText = "Error: " + result.message;
                 }
             } catch (error) {
                 document.getElementById("statusMessage").innerText = "Network Error: " + error.message;
             }
-            
-            document.getElementById("submitBtn").disabled = false;
         }
     </script>
 </body>
